@@ -22,7 +22,10 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm test
-      # Actions checks out a detached PR SHA; name the checked-out ref so branch-policy validation sees the PR branch.
-      - run: git checkout -B "${{ github.head_ref || github.ref_name }}"
-      - run: npm run workflow:check
+      # Work-unit scope and branch validation applies to the coordination PR, not the merged main snapshot.
+      - if: github.event_name == 'pull_request'
+        run: git checkout -B "${{ github.head_ref }}"
+      - if: github.event_name == 'pull_request'
+        run: npm run workflow:check
+      # Candidate SHA validation applies to both PRs and the resulting main snapshot.
       - run: npm run verify:candidate
