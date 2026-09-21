@@ -17,6 +17,7 @@ work_units:
       - changes/CHG-TODO-001/**
       - .github/**
       - .gitmodules
+      - services/**
     depends_on: []
     verify:
       - npm test
