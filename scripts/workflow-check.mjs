@@ -16,7 +16,8 @@ try {
   const unit = findUnit(options.change, options.unit);
   const repoPath = resolve(process.cwd(), options['repo-path'] || '.');
   const branch = git(['branch', '--show-current'], repoPath);
-  if (branch !== unit.branch) throw new Error(`branch mismatch: expected ${unit.branch}, found ${branch || '(detached HEAD)'}`);
+  const expectedBranch = options['expected-branch'] || unit.branch;
+  if (branch !== expectedBranch) throw new Error(`branch mismatch: expected ${expectedBranch}, found ${branch || '(detached HEAD)'}`);
   const head = git(['rev-parse', 'HEAD'], repoPath);
   if (unit.base_sha && head !== unit.base_sha && !options['allow-descendant']) {
     const isDescendant = execFileSync('git', ['merge-base', '--is-ancestor', unit.base_sha, head], { cwd: repoPath });
