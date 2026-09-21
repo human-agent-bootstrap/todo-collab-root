@@ -69,14 +69,24 @@ test('bootstrap apply writes a packet and refuses unknown unit', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('bootstrap apply refuses a run ID that escapes the task-packet directory', () => {
+test('bootstrap apply refuses identifiers that could escape or corrupt a task packet', () => {
   const dir = fixture();
   try {
     const readme = join(dir, 'README.md');
     writeFileSync(readme, 'do not overwrite\n');
-    const result = run('bootstrap.mjs', ['--change', 'CHG-TODO-001', '--unit', 'todo-ui', '--writer', 'alice', '--run', '../README', '--apply'], dir);
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /invalid run ID/);
+    const cases = [
+      ['--run', '../README'],
+      ['--change', '../CHG-TODO-001'],
+      ['--unit', '../todo-ui'],
+      ['--writer', 'alice\n# injected'],
+    ];
+    for (const [flag, value] of cases) {
+      const args = ['--change', 'CHG-TODO-001', '--unit', 'todo-ui', '--writer', 'alice', '--run', 'run-escape', '--apply'];
+      args[args.indexOf(flag) + 1] = value;
+      const result = run('bootstrap.mjs', args, dir);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /invalid (run ID|change ID|work unit ID|writer)/);
+    }
     assert.equal(readFileSync(readme, 'utf8'), 'do not overwrite\n');
     assert.equal(existsSync(join(dir, '.task-packets', '..', 'README.md.md')), false);
   } finally { rmSync(dir, { recursive: true, force: true }); }
