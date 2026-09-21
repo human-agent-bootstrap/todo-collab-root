@@ -21,5 +21,7 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm test
+      # Actions checks out a detached PR SHA; name the checked-out ref so branch-policy validation sees the PR branch.
+      - run: git checkout -B "${{ github.head_ref || github.ref_name }}"
       - run: npm run workflow:check
       - run: npm run verify:candidate
