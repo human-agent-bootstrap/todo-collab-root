@@ -36,8 +36,10 @@ paths:
               properties:
                 title:
                   type: string
+                  description: The server trims surrounding whitespace before validation and storage.
                   minLength: 1
                   maxLength: 100
+                  pattern: '.*\S.*'
       responses:
         '201':
           description: Created TODO
@@ -58,11 +60,14 @@ paths:
           application/json:
             schema:
               type: object
+              minProperties: 1
               properties:
                 title:
                   type: string
+                  description: The server trims surrounding whitespace before validation and storage.
                   minLength: 1
                   maxLength: 100
+                  pattern: '.*\S.*'
                 completed:
                   type: boolean
       responses:

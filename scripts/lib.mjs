@@ -27,6 +27,13 @@ export function required(options, ...names) {
   }
 }
 
+export function safeIdentifier(label, value) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) {
+    throw new Error(`invalid ${label}: use 1-128 letters, numbers, underscores, or hyphens`);
+  }
+  return value;
+}
+
 export function manifestPath(change) {
   return join(process.cwd(), 'changes', change, 'WORK_UNITS.yaml');
 }

@@ -27,9 +27,17 @@ try {
   const path = join(process.cwd(), 'changes', options.change, 'releases', 'candidate-001.yaml');
   if (!existsSync(path)) throw new Error(`missing candidate: ${path}`);
   const services = candidateServices(path);
-  if (services.length !== 2) throw new Error('candidate must list exactly front and back services');
+  const expectedServices = new Map([
+    ['front', 'services/front'],
+    ['back', 'services/back'],
+  ]);
+  const actualNames = services.map((service) => service.repo);
+  if (services.length !== expectedServices.size || new Set(actualNames).size !== expectedServices.size || [...expectedServices.keys()].some((name) => !actualNames.includes(name))) {
+    throw new Error('candidate must list exactly one front and one back service');
+  }
   for (const service of services) {
     if (!service.path || !service.sha) throw new Error(`candidate service ${service.repo} needs path and sha`);
+    if (service.path !== expectedServices.get(service.repo)) throw new Error(`candidate service ${service.repo} must use path ${expectedServices.get(service.repo)}`);
     const directory = join(process.cwd(), service.path);
     if (!existsSync(join(directory, '.git'))) throw new Error(`submodule is not initialized: ${service.path}`);
     const actual = execFileSync('git', ['-C', directory, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();

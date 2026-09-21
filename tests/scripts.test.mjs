@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -25,6 +25,23 @@ function fixture() {
   writeFileSync(join(dir, 'changes/CHG-TODO-001/WORK_UNITS.yaml'), `change_id: CHG-TODO-001\nwork_units:\n  - id: todo-ui\n    repo: front\n    branch: feat/CHG-TODO-001/todo-ui\n    base_sha: ${frontSha}\n    write_paths:\n      - src/**\n      - tests/**\n    depends_on:\n      - contract\n    verify:\n      - npm test\n`);
   writeFileSync(join(dir, 'changes/CHG-TODO-001/releases/candidate-001.yaml'), `change_id: CHG-TODO-001\ncandidate: 1\nservices:\n  - repo: front\n    path: services/front\n    sha: ${frontSha}\n  - repo: back\n    path: services/back\n    sha: ${backSha}\n`);
   return dir;
+}
+
+function workflowFixture() {
+  const dir = fixture();
+  const worktree = join(dir, 'child-worktree');
+  mkdirSync(join(worktree, 'src'), { recursive: true });
+  execFileSync('git', ['init', '-q'], { cwd: worktree });
+  execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: worktree });
+  execFileSync('git', ['config', 'user.name', 'Test'], { cwd: worktree });
+  writeFileSync(join(worktree, 'README.md'), 'baseline\n');
+  writeFileSync(join(worktree, 'src/app.js'), 'export const baseline = true;\n');
+  execFileSync('git', ['add', '.'], { cwd: worktree });
+  execFileSync('git', ['commit', '-qm', 'baseline'], { cwd: worktree });
+  const base = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).trim();
+  execFileSync('git', ['checkout', '-qb', 'feat/CHG-TODO-001/todo-ui'], { cwd: worktree });
+  writeFileSync(join(dir, 'changes/CHG-TODO-001/WORK_UNITS.yaml'), `change_id: CHG-TODO-001\nwork_units:\n  - id: todo-ui\n    repo: front\n    branch: feat/CHG-TODO-001/todo-ui\n    base_sha: ${base}\n    write_paths:\n      - src/**\n    depends_on: []\n    verify:\n      - npm test\n`);
+  return { dir, worktree };
 }
 
 test('bootstrap defaults to dry-run and writes no task packet', () => {
@@ -52,6 +69,19 @@ test('bootstrap apply writes a packet and refuses unknown unit', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('bootstrap apply refuses a run ID that escapes the task-packet directory', () => {
+  const dir = fixture();
+  try {
+    const readme = join(dir, 'README.md');
+    writeFileSync(readme, 'do not overwrite\n');
+    const result = run('bootstrap.mjs', ['--change', 'CHG-TODO-001', '--unit', 'todo-ui', '--writer', 'alice', '--run', '../README', '--apply'], dir);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /invalid run ID/);
+    assert.equal(readFileSync(readme, 'utf8'), 'do not overwrite\n');
+    assert.equal(existsSync(join(dir, '.task-packets', '..', 'README.md.md')), false);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 test('workflow check rejects an incorrect branch before validation', () => {
   const dir = fixture();
   try {
@@ -66,6 +96,20 @@ test('workflow check rejects an incorrect branch before validation', () => {
     assert.match(result.stderr, /branch mismatch/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
+
+for (const state of ['untracked', 'unstaged', 'staged']) {
+  test(`workflow check rejects an out-of-scope ${state} change`, () => {
+    const { dir, worktree } = workflowFixture();
+    try {
+      if (state === 'untracked') writeFileSync(join(worktree, 'outside.txt'), 'outside\n');
+      else writeFileSync(join(worktree, 'README.md'), `${state}\n`);
+      if (state === 'staged') execFileSync('git', ['add', 'README.md'], { cwd: worktree });
+      const result = run('workflow-check.mjs', ['--change', 'CHG-TODO-001', '--unit', 'todo-ui', '--repo-path', worktree], dir);
+      assert.notEqual(result.status, 0);
+      assert.match(result.stderr, /scope violation/);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
 
 test('candidate verification accepts matching submodule SHAs', () => {
   const dir = fixture();
@@ -86,4 +130,31 @@ test('candidate verification accepts matching submodule SHAs', () => {
     assert.equal(result.status, 0, result.stderr);
     assert.match(result.stdout, /Candidate CHG-TODO-001: PASS/);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('candidate verification rejects duplicate service identities', () => {
+  const dir = fixture();
+  try {
+    const actualShas = new Map();
+    for (const service of ['front', 'back']) {
+      const serviceDir = join(dir, 'services', service);
+      execFileSync('git', ['init', '-q'], { cwd: serviceDir });
+      execFileSync('git', ['config', 'user.email', 'test@example.invalid'], { cwd: serviceDir });
+      execFileSync('git', ['config', 'user.name', 'Test'], { cwd: serviceDir });
+      writeFileSync(join(serviceDir, 'README.md'), service);
+      execFileSync('git', ['add', '.'], { cwd: serviceDir });
+      execFileSync('git', ['commit', '-qm', 'fixture'], { cwd: serviceDir });
+      actualShas.set(service, execFileSync('git', ['rev-parse', 'HEAD'], { cwd: serviceDir, encoding: 'utf8' }).trim());
+    }
+    writeFileSync(join(dir, 'changes/CHG-TODO-001/releases/candidate-001.yaml'), `change_id: CHG-TODO-001\ncandidate: 1\nservices:\n  - repo: front\n    path: services/front\n    sha: ${actualShas.get('front')}\n  - repo: front\n    path: services/back\n    sha: ${actualShas.get('back')}\n`);
+    const result = run('verify-candidate.mjs', ['--change', 'CHG-TODO-001'], dir);
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /exactly one front and one back/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('OpenAPI contract rejects blank titles and empty PATCH bodies', () => {
+  const contract = readFileSync(join(root, 'changes/CHG-TODO-001/contracts/todo-api.openapi.yaml'), 'utf8');
+  assert.match(contract, /pattern:\s*['"].*\\S.*['"]/);
+  assert.match(contract, /minProperties:\s*1/);
 });
