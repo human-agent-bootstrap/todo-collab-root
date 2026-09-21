@@ -107,6 +107,20 @@ test('workflow check rejects an incorrect branch before validation', () => {
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
+test('workflow check accepts an explicit branch expected by a follow-up PR', () => {
+  const { dir, worktree } = workflowFixture();
+  try {
+    execFileSync('git', ['branch', '-m', 'fix/CHG-TODO-001/main-ci-validation'], { cwd: worktree });
+    const result = run('workflow-check.mjs', [
+      '--change', 'CHG-TODO-001',
+      '--unit', 'todo-ui',
+      '--repo-path', worktree,
+      '--expected-branch', 'fix/CHG-TODO-001/main-ci-validation',
+    ], dir);
+    assert.equal(result.status, 0, result.stderr);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 for (const state of ['untracked', 'unstaged', 'staged']) {
   test(`workflow check rejects an out-of-scope ${state} change`, () => {
     const { dir, worktree } = workflowFixture();
