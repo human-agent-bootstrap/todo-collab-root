@@ -1,0 +1,77 @@
+change_id: CHG-TODO-001
+state: planned
+work_units:
+  - id: coordination
+    repo: root
+    goal: Maintain root coordination records and candidate pointers.
+    branch: change/CHG-TODO-001/coordination
+    base_sha: bffcec94b30b87b7d3348cc33d8745a9a9fdac50
+    write_paths:
+      - README.md
+      - QUICKSTART.md
+      - WORKFLOW.md
+      - package.json
+      - package-lock.json
+      - scripts/**
+      - tests/**
+      - changes/CHG-TODO-001/**
+      - .github/**
+      - .gitmodules
+      - services/**
+    depends_on: []
+    verify:
+      - npm test
+      - npm run workflow:check
+      - npm run verify:candidate
+  - id: contract
+    repo: root
+    goal: Approve the API snapshot and work-unit boundary.
+    branch: change/CHG-TODO-001/coordination
+    base_sha: bffcec94b30b87b7d3348cc33d8745a9a9fdac50
+    write_paths:
+      - changes/CHG-TODO-001/contracts/**
+    depends_on: []
+    verify:
+      - npm test
+  - id: todo-api
+    repo: back
+    goal: Implement the TODO API against the approved OpenAPI snapshot.
+    branch: feat/CHG-TODO-001/todo-api
+    base_sha: 75c54550c79d5a86ab6685c3de428ff3fd261586
+    write_paths:
+      - src/**
+      - openapi/**
+      - tests/**
+    depends_on:
+      - contract
+    verify:
+      - npm test
+      - npm run build
+  - id: todo-ui
+    repo: front
+    goal: Implement the TODO UI against the approved OpenAPI snapshot.
+    branch: feat/CHG-TODO-001/todo-ui
+    base_sha: e9f0fb31c9f72fdf1c3a30923c3d7b62a69d3166
+    write_paths:
+      - src/**
+      - tests/**
+    depends_on:
+      - contract
+    verify:
+      - npm test
+      - npm run build
+  - id: candidate-integration
+    repo: root
+    goal: Pin merged child SHAs and run candidate integration checks.
+    branch: change/CHG-TODO-001/coordination
+    base_sha: bffcec94b30b87b7d3348cc33d8745a9a9fdac50
+    write_paths:
+      - changes/CHG-TODO-001/PRS.yaml
+      - changes/CHG-TODO-001/STATUS.md
+      - changes/CHG-TODO-001/releases/**
+      - services/**
+    depends_on:
+      - todo-api
+      - todo-ui
+    verify:
+      - npm run verify:candidate

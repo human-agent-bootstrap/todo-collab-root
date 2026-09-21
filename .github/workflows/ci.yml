@@ -1,0 +1,28 @@
+name: Root validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm test
+      # Actions checks out a detached PR SHA; name the checked-out ref so branch-policy validation sees the PR branch.
+      - run: git checkout -B "${{ github.head_ref || github.ref_name }}"
+      - run: npm run workflow:check
+      - run: npm run verify:candidate
